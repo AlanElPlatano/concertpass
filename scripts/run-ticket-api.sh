@@ -13,4 +13,9 @@ docker run -d --name ticket-api -p 8080:8080 \
   -e DB_NAME="$DB_NAME" \
   -e DB_USER="$DB_USER" \
   -e DB_PASSWORD \
+  -e QUEUE_URL \
+  -e AWS_ACCESS_KEY_ID \
+  -e AWS_SECRET_ACCESS_KEY \
+  -e AWS_SESSION_TOKEN \
+  -e AWS_DEFAULT_REGION \
   "$image_uri"

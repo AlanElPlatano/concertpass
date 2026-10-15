@@ -1,5 +1,7 @@
 import os
 import uuid
+import json # NUEVO: Para convertir el mensaje a formato JSON
+import boto3 # NUEVO: SDK de AWS para Python
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -7,7 +9,8 @@ import psycopg
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-CONFIRMED_STATUS = "confirmed"
+# MODIFICADO: El estado inicial ahora es pending
+PENDING_STATUS = "pending"
 
 CREATE_RESERVATIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS reservations (
@@ -55,14 +58,40 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="ticket-api", lifespan=lifespan)
 
+# NUEVO: Inicializar cliente de SQS
+sqs_client = boto3.client("sqs")
+# NUEVO: Leer la URL de la cola desde variables de entorno
+QUEUE_URL = os.environ.get("QUEUE_URL")
+
 
 @app.post("/reserve")
 def reserve(request: ReservationRequest):
     reservation_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
+    
+    # 1. MODIFICADO: Insertar en la base de datos como PENDING
     with connect() as connection:
         connection.execute(INSERT_RESERVATION, (
             reservation_id, request.concert_id, request.user_id,
-            request.ticket_type, request.quantity, CONFIRMED_STATUS, now, now,
+            request.ticket_type, request.quantity, PENDING_STATUS, now, now,
         ))
-    return {"reservation_id": str(reservation_id), "status": CONFIRMED_STATUS}
+    
+    # 2. NUEVO: Preparar el payload del mensaje
+    message_body = {
+        "reservation_id": str(reservation_id),
+        "concert_id": request.concert_id,
+        "user_id": request.user_id,
+        "ticket_type": request.ticket_type,
+        "quantity": request.quantity
+    }
+    
+    # 3. NUEVO: Enviar a la cola SQS FIFO
+    sqs_client.send_message(
+        QueueUrl=QUEUE_URL,
+        MessageBody=json.dumps(message_body),
+        MessageGroupId=request.concert_id, # Requerido para colas FIFO
+        MessageDeduplicationId=str(reservation_id) # Requerido para colas FIFO, previene duplicados
+    )
+
+    # MODIFICADO: Retornar estado PENDING
+    return {"reservation_id": str(reservation_id), "status": PENDING_STATUS}
