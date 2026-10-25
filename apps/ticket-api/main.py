@@ -6,7 +6,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import psycopg
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
 # MODIFICADO: El estado inicial ahora es pending
@@ -29,6 +30,13 @@ INSERT_RESERVATION = """
 INSERT INTO reservations (reservation_id, concert_id, user_id, ticket_type,
                           quantity, status, created_at, updated_at)
 VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+"""
+
+SELECT_RESERVATION = """
+SELECT reservation_id, concert_id, user_id, ticket_type, quantity, status,
+       created_at, updated_at
+FROM reservations
+WHERE reservation_id = %s;
 """
 
 
@@ -95,3 +103,12 @@ def reserve(request: ReservationRequest):
 
     # MODIFICADO: Retornar estado PENDING
     return {"reservation_id": str(reservation_id), "status": PENDING_STATUS}
+
+
+@app.get("/reservation/{reservation_id}")
+def get_reservation(reservation_id: uuid.UUID):
+    with connect() as connection, connection.cursor(row_factory=dict_row) as cursor:
+        reservation = cursor.execute(SELECT_RESERVATION, (reservation_id,)).fetchone()
+    if reservation is None:
+        raise HTTPException(status_code=404, detail="Reservation not found")
+    return reservation

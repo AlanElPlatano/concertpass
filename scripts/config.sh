@@ -6,6 +6,9 @@ export DB_SECURITY_GROUP="${DB_SECURITY_GROUP:-concertpass-db-sg}"
 export DB_NAME="${DB_NAME:-concertpass}"
 export DB_USER="${DB_USER:-postgres}"
 export DB_PORT="${DB_PORT:-5432}"
+export DB_SECRET_NAME="${DB_SECRET_NAME:-concertpass/db}"
+export EVENTS_TABLE="${EVENTS_TABLE:-events}"
+export QUEUE_NAME="${QUEUE_NAME:-concertpass-reservations.fifo}"
 export ECR_REPOSITORIES="ticket-checkout ticket-api"
 
 require_db_password() {
