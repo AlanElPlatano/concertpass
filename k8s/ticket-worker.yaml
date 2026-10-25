@@ -1,0 +1,32 @@
+# ECR_REGISTRY lo reemplaza scripts/deploy-k8s.sh al aplicar el manifiesto.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ticket-worker
+  namespace: concertpass
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ticket-worker
+  template:
+    metadata:
+      labels:
+        app: ticket-worker
+    spec:
+      containers:
+        - name: ticket-worker
+          image: ECR_REGISTRY/ticket-worker:latest
+          imagePullPolicy: Always
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          envFrom:
+            - secretRef:
+                name: concertpass-db
+            - configMapRef:
+                name: concertpass-config
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi

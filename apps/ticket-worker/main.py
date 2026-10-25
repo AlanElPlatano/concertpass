@@ -11,6 +11,8 @@ dynamodb = boto3.client("dynamodb", region_name="us-east-1")
 QUEUE_URL = os.environ.get("QUEUE_URL")
 # Agregamos la URL del checkout; por defecto apuntará al puerto 8081 local
 CHECKOUT_URL = os.environ.get("CHECKOUT_URL", "http://localhost:8081/checkout")
+# Debe ser menor al visibility timeout de SQS (30s) para no reprocesar mensajes
+CHECKOUT_TIMEOUT_SECONDS = 10
 
 def connect():
     return psycopg.connect(
@@ -20,6 +22,14 @@ def connect():
         user=os.environ["DB_USER"],
         password=os.environ["DB_PASSWORD"],
     )
+
+def reject(reservation_id):
+    with connect() as conn:
+        conn.execute("""
+            UPDATE reservations 
+            SET status = 'rejected', updated_at = NOW() 
+            WHERE reservation_id = %s;
+        """, (reservation_id,))
 
 def process_message(msg):
     body = json.loads(msg["Body"])
@@ -36,7 +46,8 @@ def process_message(msg):
     
     item = response.get("Item")
     if not item:
-        print(f"Error: Concierto {concert_id} no encontrado en Dynamo.")
+        reject(reservation_id)
+        print(f"Reserva {reservation_id} REJECTED. Concierto {concert_id} no encontrado en Dynamo.")
         return
 
     # Extraer la capacidad específica para el tipo de boleto (ej. "vip")
@@ -46,6 +57,14 @@ def process_message(msg):
     # 2. Transacción en PostgreSQL con FOR UPDATE
     with connect() as conn:
         with conn.cursor() as cur:
+            # FOR UPDATE no bloquea nada si aún no hay filas vendidas, así que
+            # serializamos por concierto + tipo de boleto con un advisory lock
+            # que se libera automáticamente al hacer commit o rollback.
+            cur.execute(
+                "SELECT pg_advisory_xact_lock(hashtext(%s));",
+                (f"{concert_id}:{ticket_type}",),
+            )
+
             # Bloquea las filas calculadas para evitar race conditions
             cur.execute("""
                 SELECT COALESCE(SUM(quantity), 0) 
@@ -76,7 +95,8 @@ def process_message(msg):
                     "quantity": quantity
                 }
                 try:
-                    resp = requests.post(CHECKOUT_URL, json=checkout_payload)
+                    resp = requests.post(CHECKOUT_URL, json=checkout_payload,
+                                         timeout=CHECKOUT_TIMEOUT_SECONDS)
                     if resp.status_code == 200:
                         cur.execute("""
                             UPDATE reservations 
@@ -88,17 +108,10 @@ def process_message(msg):
                 except Exception as e:
                     print(f"Error al conectar con checkout: {e}")
             else:
-                conn.rollback() # Libera el bloqueo del FOR UPDATE
+                conn.rollback() # Libera el bloqueo del FOR UPDATE y el advisory lock
                 
                 # Actualiza a rejected en una transacción separada
-                with connect() as conn2:
-                    with conn2.cursor() as cur2:
-                        cur2.execute("""
-                            UPDATE reservations 
-                            SET status = 'rejected', updated_at = NOW() 
-                            WHERE reservation_id = %s;
-                        """, (reservation_id,))
-                        conn2.commit()
+                reject(reservation_id)
                 print(f"Reserva {reservation_id} REJECTED. Sin capacidad.")
 
 def main():

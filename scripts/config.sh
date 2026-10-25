@@ -9,7 +9,9 @@ export DB_PORT="${DB_PORT:-5432}"
 export DB_SECRET_NAME="${DB_SECRET_NAME:-concertpass/db}"
 export EVENTS_TABLE="${EVENTS_TABLE:-events}"
 export QUEUE_NAME="${QUEUE_NAME:-concertpass-reservations.fifo}"
-export ECR_REPOSITORIES="ticket-checkout ticket-api"
+export ECR_REPOSITORIES="ticket-checkout ticket-api ticket-worker"
+export CLUSTER_NAME="${CLUSTER_NAME:-concertpass}"
+export K8S_NAMESPACE="${K8S_NAMESPACE:-concertpass}"
 
 require_db_password() {
   if [ -z "${DB_PASSWORD:-}" ]; then

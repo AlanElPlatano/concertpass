@@ -1,0 +1,43 @@
+# ECR_REGISTRY lo reemplaza scripts/deploy-k8s.sh al aplicar el manifiesto.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ticket-checkout
+  namespace: concertpass
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ticket-checkout
+  template:
+    metadata:
+      labels:
+        app: ticket-checkout
+    spec:
+      containers:
+        - name: ticket-checkout
+          image: ECR_REGISTRY/ticket-checkout:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ticket-checkout
+  namespace: concertpass
+spec:
+  selector:
+    app: ticket-checkout
+  ports:
+    - port: 8080
+      targetPort: 8080
