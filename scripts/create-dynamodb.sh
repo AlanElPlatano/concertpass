@@ -21,12 +21,14 @@ else
 fi
 
 put_concert() {
-  local concert_id="$1" name="$2" general="$3" vip="$4"
+  local concert_id="$1" name="$2" date="$3" venue="$4" general="$5" vip="$6"
   aws dynamodb put-item --region "$AWS_REGION" \
     --table-name "$EVENTS_TABLE" \
     --item "{
       \"concert_id\": {\"S\": \"${concert_id}\"},
       \"name\":       {\"S\": \"${name}\"},
+      \"date\":       {\"S\": \"${date}\"},
+      \"recinto\":    {\"S\": \"${venue}\"},
       \"capacity\":   {\"M\": {
         \"general\": {\"N\": \"${general}\"},
         \"vip\":     {\"N\": \"${vip}\"}
@@ -35,5 +37,7 @@ put_concert() {
   echo "Concierto ${concert_id}: general=${general}, vip=${vip}"
 }
 
-put_concert "concert-nicho"        "Noche Indie Acústica" 500 50
-put_concert "concert-alta-demanda" "Gira Mundial Estelar" 100 10
+put_concert "concert-nicho" "Noche Indie Acústica" \
+  "2026-11-20" "Foro Independencia, GDL" 500 50
+put_concert "concert-alta-demanda" "Gira Mundial Estelar" \
+  "2026-12-05" "Estadio Akron, GDL" 100 10

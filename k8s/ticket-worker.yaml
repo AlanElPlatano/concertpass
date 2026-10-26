@@ -5,7 +5,7 @@ metadata:
   name: ticket-worker
   namespace: concertpass
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: ticket-worker
